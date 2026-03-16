@@ -6,7 +6,7 @@ from typing import Any
 from openlineage.client import OpenLineageClient
 from openlineage.client.facet import BaseFacet
 from openlineage.client.facet import SchemaDatasetFacet, SchemaField
-from openlineage.client.run import Dataset, InputDataset, Job, OutputDataset, Run, RunEvent, RunState
+from openlineage.client.run import InputDataset, Job, OutputDataset, Run, RunEvent, RunState
 from openlineage.client.transport import HttpConfig, HttpTransport
 
 

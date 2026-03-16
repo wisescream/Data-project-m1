@@ -3,7 +3,6 @@ import os
 import pytest
 from chispa import assert_df_equality
 from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
 
 os.environ.setdefault("ENV", "dev")
 os.environ.setdefault("LOGSTORM_SAMPLE_RATE", "1.0")
