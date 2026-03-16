@@ -4,26 +4,26 @@ LogStorm is a school data engineering platform that ingests structured app logs 
 
 ## Architecture
 
-![LogStorm pipeline architecture](/C:/Users/Rayane/OneDrive/Bureau/Algo-/logstorm_pipeline_architecture.png)
+![LogStorm pipeline architecture](./logstorm_pipeline_architecture.png)
 
 ## Structure
 
 - Runtime apps:
-  - [app.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/app.py)
-  - [load_gen.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/load_gen.py)
-  - [nifi_bootstrap.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/nifi_bootstrap.py)
-  - [spark_job.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/spark_job.py)
-  - [monitor.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/monitor.py)
-  - [dataops_service.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/dataops_service.py)
+  - [app.py](./app.py)
+  - [load_gen.py](./load_gen.py)
+  - [nifi_bootstrap.py](./nifi_bootstrap.py)
+  - [spark_job.py](./spark_job.py)
+  - [monitor.py](./monitor.py)
+  - [dataops_service.py](./dataops_service.py)
 - Shared DataOps assets:
-  - [contracts/logstorm-log-event.yml](/C:/Users/Rayane/OneDrive/Bureau/Algo-/contracts/logstorm-log-event.yml)
-  - [ge/logstorm_suite.json](/C:/Users/Rayane/OneDrive/Bureau/Algo-/ge/logstorm_suite.json)
-  - [config.yml](/C:/Users/Rayane/OneDrive/Bureau/Algo-/config.yml)
-  - [slo.yml](/C:/Users/Rayane/OneDrive/Bureau/Algo-/slo.yml)
-  - [lineage/emit_lineage.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/lineage/emit_lineage.py)
+  - [contracts/logstorm-log-event.yml](./contracts/logstorm-log-event.yml)
+  - [ge/logstorm_suite.json](./ge/logstorm_suite.json)
+  - [config.yml](./config.yml)
+  - [slo.yml](./slo.yml)
+  - [lineage/emit_lineage.py](./lineage/emit_lineage.py)
 - More detail:
-  - [docs/PROJECT_STRUCTURE.md](/C:/Users/Rayane/OneDrive/Bureau/Algo-/docs/PROJECT_STRUCTURE.md)
-  - [docs/DATAOPS.md](/C:/Users/Rayane/OneDrive/Bureau/Algo-/docs/DATAOPS.md)
+  - [docs/PROJECT_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md)
+  - [docs/DATAOPS.md](./docs/DATAOPS.md)
 
 ## Local Boot
 
@@ -60,11 +60,11 @@ docker compose --profile monitor up --build monitor ge-data-docs prometheus graf
 
 ## CI/CD
 
-The CI/CD pipeline is defined in [.github/workflows/pipeline.yml](/C:/Users/Rayane/OneDrive/Bureau/Algo-/.github/workflows/pipeline.yml). It runs linting, unit tests, integration tests against Docker Compose, then deploy actions on merge to `main`.
+The CI/CD pipeline is defined in [.github/workflows/pipeline.yml](./.github/workflows/pipeline.yml). It runs linting, unit tests, integration tests against Docker Compose, then deploy actions on merge to `main`.
 
 ## NiFi
 
-The primary NiFi provisioning path is [nifi_bootstrap.py](/C:/Users/Rayane/OneDrive/Bureau/Algo-/nifi_bootstrap.py). It now includes:
+The primary NiFi provisioning path is [nifi_bootstrap.py](./nifi_bootstrap.py). It now includes:
 
 - layered process groups
 - contract validation through the Python DataOps API
