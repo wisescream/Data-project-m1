@@ -1,0 +1,11 @@
+flowchart LR
+    A["01 Sources"] --> B["02 Ingestion"]
+    B --> C["03 Data Quality & Validation"]
+    C --> D["04 Transformation & Enrichment"]
+    D --> E["05 Routing"]
+    E --> F["06 Delivery & Storage"]
+    A -. source failures .-> G["07 System & Errors"]
+    B -. ingestion failures .-> G
+    C -. invalid / duplicate .-> G
+    D -. enrichment failures .-> G
+    F -. storage failures .-> G

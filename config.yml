@@ -1,0 +1,36 @@
+dev:
+  s3_raw: minio://logstorm-raw-dev
+  s3_enriched: minio://logstorm-enriched-dev
+  s3_models: minio://logstorm-models-dev
+  s3_quarantine: minio://logstorm-quarantine-dev
+  s3_dq_reports: minio://logstorm-dq-reports-dev
+  spark_cores: 1
+  nifi_host: localhost:8080
+  sample_rate: 0.1
+  enable_alerts: false
+  marquez_url: http://localhost:5000
+  ge_docs_url: http://localhost:8082
+staging:
+  s3_raw: s3://logstorm-raw-staging
+  s3_enriched: s3://logstorm-enriched-staging
+  s3_models: s3://logstorm-models-staging
+  s3_quarantine: s3://logstorm-quarantine-staging
+  s3_dq_reports: s3://logstorm-dq-reports-staging
+  spark_cores: 2
+  nifi_host: nifi-staging:8080
+  sample_rate: 1.0
+  enable_alerts: true
+  marquez_url: http://marquez:5000
+  ge_docs_url: http://ge-data-docs:8082
+prod:
+  s3_raw: s3://logstorm-raw-prod
+  s3_enriched: s3://logstorm-enriched-prod
+  s3_models: s3://logstorm-models-prod
+  s3_quarantine: s3://logstorm-quarantine-prod
+  s3_dq_reports: s3://logstorm-dq-reports-prod
+  spark_cores: 4
+  nifi_host: nifi-prod:8080
+  sample_rate: 1.0
+  enable_alerts: true
+  marquez_url: http://marquez:5000
+  ge_docs_url: http://ge-data-docs:8082

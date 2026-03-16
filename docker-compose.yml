@@ -1,0 +1,315 @@
+services:
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+  minio-init:
+    image: minio/mc:RELEASE.2025-02-08T19-14-21Z
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        until /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 2; done
+        /usr/bin/mc mb -p local/logstorm-raw || true
+        /usr/bin/mc mb -p local/logstorm-enriched || true
+        /usr/bin/mc mb -p local/logstorm-models || true
+        /usr/bin/mc mb -p local/logstorm-quarantine || true
+        /usr/bin/mc mb -p local/logstorm-dq-reports || true
+        /usr/bin/mc mb -p local/logstorm-raw-dev || true
+        /usr/bin/mc mb -p local/logstorm-enriched-dev || true
+        /usr/bin/mc mb -p local/logstorm-models-dev || true
+        /usr/bin/mc mb -p local/logstorm-quarantine-dev || true
+        /usr/bin/mc mb -p local/logstorm-dq-reports-dev || true
+    restart: "no"
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:2.5.0
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
+    ports:
+      - "8001:8000"
+  dynamodb-init:
+    image: amazon/aws-cli:2.24.21
+    environment:
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        aws dynamodb create-table \
+          --table-name logstorm-alerts \
+          --attribute-definitions AttributeName=alert_id,AttributeType=S \
+          --key-schema AttributeName=alert_id,KeyType=HASH \
+          --billing-mode PAY_PER_REQUEST \
+          --endpoint-url http://dynamodb-local:8000 || true
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    environment:
+      ENV: dev
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./logs:/var/log/logstorm
+    ports:
+      - "8000:8000"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  geoip:
+    build:
+      context: .
+      dockerfile: docker/geoip.Dockerfile
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      AWS_DEFAULT_REGION: us-east-1
+      ENV: dev
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  nifi:
+    image: apache/nifi:1.24.0
+    environment:
+      NIFI_WEB_HTTP_PORT: 8080
+      SINGLE_USER_CREDENTIALS_USERNAME: admin
+      SINGLE_USER_CREDENTIALS_PASSWORD: logstorm123456
+      NIFI_SENSITIVE_PROPS_KEY: logstorm-sensitive-key
+    ports:
+      - "8080:8080"
+      - "5140:5140/udp"
+    volumes:
+      - nifi-state:/opt/nifi/nifi-current/state
+      - nifi-database:/opt/nifi/nifi-current/database_repository
+      - nifi-flowfile:/opt/nifi/nifi-current/flowfile_repository
+      - nifi-content:/opt/nifi/nifi-current/content_repository
+      - ./nifi-template.xml:/opt/nifi/nifi-current/conf/templates/logstorm-template.xml:ro
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      geoip:
+        condition: service_healthy
+      dataops-api:
+        condition: service_healthy
+
+  nifi-bootstrap:
+    build:
+      context: .
+      dockerfile: docker/nifi-bootstrap.Dockerfile
+    environment:
+      NIFI_URL: http://nifi:8080
+      NIFI_USERNAME: admin
+      NIFI_PASSWORD: logstorm123456
+      GEOIP_URL: http://geoip:8081/lookup
+      S3_GATEWAY_URL: http://geoip:8081/s3/object
+      DATAOPS_CONTRACT_URL: http://dataops-api:8090/contracts/validate
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      ENV: dev
+    depends_on:
+      nifi:
+        condition: service_started
+      dataops-api:
+        condition: service_healthy
+    restart: "no"
+
+  dataops-api:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    command: ["uvicorn", "dataops_service:app", "--host", "0.0.0.0", "--port", "8090", "--no-access-log"]
+    environment:
+      ENV: dev
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      AWS_DEFAULT_REGION: us-east-1
+      QUARANTINE_BUCKET: logstorm-quarantine
+      OPENLINEAGE_URL: http://marquez:5000/api/v1/lineage
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8090:8090"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      marquez:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  rsyslog:
+    build:
+      context: .
+      dockerfile: docker/rsyslog.Dockerfile
+    volumes:
+      - ./rsyslog.conf:/etc/rsyslog.conf:ro
+      - ./logs:/var/log/logstorm
+      - rsyslog-work:/work
+    command: ["rsyslogd", "-n", "-f", "/etc/rsyslog.conf"]
+    depends_on:
+      web:
+        condition: service_healthy
+      nifi-bootstrap:
+        condition: service_completed_successfully
+
+  spark:
+    build:
+      context: .
+      dockerfile: docker/spark.Dockerfile
+    profiles: ["ml"]
+    environment:
+      ENV: dev
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      AWS_DEFAULT_REGION: us-east-1
+      LOGSTORM_RAW_PATH: s3a://logstorm-raw/
+      LOGSTORM_ENRICHED_PATH: s3a://logstorm-enriched/
+      LOGSTORM_MODEL_BUCKET: logstorm-models
+      LOGSTORM_DDB_TABLE: logstorm-alerts
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      MLFLOW_TRACKING_URI: file:/tmp/mlruns
+      LOGSTORM_CHECKPOINT_PATH: /tmp/logstorm-checkpoints
+      DQ_REPORT_BUCKET: logstorm-dq-reports
+      OPENLINEAGE_URL: http://marquez:5000/api/v1/lineage
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      dynamodb-init:
+        condition: service_completed_successfully
+      nifi-bootstrap:
+        condition: service_completed_successfully
+      marquez:
+        condition: service_started
+
+  monitor:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    profiles: ["monitor"]
+    command: ["python", "monitor.py"]
+    environment:
+      ENV: dev
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      AWS_DEFAULT_REGION: us-east-1
+      RAW_BUCKET: logstorm-raw
+      ENRICHED_BUCKET: logstorm-enriched
+      MODEL_BUCKET: logstorm-models
+      QUARANTINE_BUCKET: logstorm-quarantine
+      DQ_REPORT_BUCKET: logstorm-dq-reports
+      BASELINE_SCHEMA_PATH: /app/schema.json
+      OPENLINEAGE_URL: http://marquez:5000/api/v1/lineage
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "9108:9108"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      marquez:
+        condition: service_started
+
+  ge-data-docs:
+    image: nginx:1.27-alpine
+    profiles: ["monitor"]
+    ports:
+      - "8082:80"
+    volumes:
+      - ./ge/data_docs:/usr/share/nginx/html:ro
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: marquez
+      POSTGRES_DB: marquez
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  marquez:
+    image: marquezproject/marquez:0.50.0
+    environment:
+      MARQUEZ_PORT: 5000
+      MARQUEZ_ADMIN_PORT: 5001
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/marquez
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: marquez
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    profiles: ["monitor"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      dataops-api:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    profiles: ["monitor"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+
+volumes:
+  minio-data:
+  nifi-state:
+  nifi-database:
+  nifi-flowfile:
+  nifi-content:
+  rsyslog-work:
+  postgres-data:

@@ -1,0 +1,109 @@
+name: LogStorm Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: ruff check .
+      - run: yamllint . github/workflows/pipeline.yml docker-compose.yml contracts/logstorm-log-event.yml config.yml slo.yml
+      - run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import yaml
+          from jsonschema import validate
+          schema = json.loads(Path("contracts/contract.schema.json").read_text(encoding="utf-8"))
+          contract = yaml.safe_load(Path("contracts/logstorm-log-event.yml").read_text(encoding="utf-8"))
+          validate(contract, schema)
+          PY
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: pytest tests/test_load_gen.py tests/test_monitor.py tests/test_spark_job.py
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: [lint, unit-tests]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build minio minio-init dynamodb-local dynamodb-init web geoip dataops-api postgres marquez nifi nifi-bootstrap rsyslog
+      - run: |
+          python - <<'PY'
+          import requests
+          for i in range(100):
+              headers = {"X-User-Id": f"usr_{i:08x}"[:12], "X-Session-Id": f"s{i}", "User-Agent": "gha"}
+              requests.get("http://localhost:8000/api/data", headers=headers, timeout=10)
+          PY
+      - run: sleep 40
+      - run: |
+          python - <<'PY'
+          import boto3, json
+          from botocore.client import Config
+          import pyarrow.parquet as pq
+          from pyarrow.fs import S3FileSystem
+          s3 = boto3.client("s3", endpoint_url="http://localhost:9000", aws_access_key_id="minioadmin", aws_secret_access_key="minioadmin", config=Config(signature_version="s3v4"))
+          raw = s3.list_objects_v2(Bucket="logstorm-raw").get("Contents", [])
+          assert len(raw) >= 90, f"expected at least 90 parquet objects, got {len(raw)}"
+          quarantine = s3.list_objects_v2(Bucket="logstorm-quarantine").get("Contents", [])
+          assert len(quarantine) == 0, f"expected no quarantined records, got {len(quarantine)}"
+          first = next(item["Key"] for item in raw if not item["Key"].endswith("/"))
+          fs = S3FileSystem(endpoint_override="localhost:9000", access_key="minioadmin", secret_key="minioadmin", scheme="http")
+          schema = pq.read_schema(f"logstorm-raw/{first}", filesystem=fs)
+          names = set(schema.names)
+          for required in ["timestamp", "status_code", "response_time_ms", "user_id", "ip", "endpoint"]:
+              assert required in names, f"missing field {required}"
+          PY
+      - if: always()
+        run: docker compose down -v
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [integration-test]
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install awscli requests
+      - name: Upload Spark artifact
+        run: aws s3 cp spark_job.py s3://${{ secrets.SPARK_ARTIFACT_BUCKET }}/spark_job-${{ github.sha }}.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Reload NiFi flow
+        run: |
+          python - <<'PY'
+          import os, requests
+          base = os.environ["NIFI_API"]
+          requests.post(f"{base}/flow/process-groups/root/template-instance", json={}, timeout=30)
+          PY
+        env:
+          NIFI_API: ${{ secrets.NIFI_API }}
+      - name: Restart monitoring daemon
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MONITOR_HOST }}
+          username: ${{ secrets.MONITOR_USER }}
+          key: ${{ secrets.MONITOR_SSH_KEY }}
+          script: sudo systemctl restart logstorm-monitor

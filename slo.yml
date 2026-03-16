@@ -1,0 +1,15 @@
+slos:
+  - name: pipeline_freshness
+    description: Enriched partition must exist within 10min of hour boundary
+    target: 99.5
+    alert_if_breached: true
+  - name: contract_compliance
+    description: < 1% of records violate the data contract
+    target: 99.0
+  - name: ml_anomaly_precision
+    description: Confirmed true anomalies / total flagged > 0.6
+    target: 60.0
+    evaluation: manual_review_sample
+  - name: spark_batch_latency
+    description: Enriched write completes within 3min of raw landing
+    target: 95.0

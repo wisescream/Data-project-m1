@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<template encoding-version="1.2">
+  <description>LogStorm NiFi template for syslog ingestion, enrichment, routing, deduplication, parquet conversion, and S3 delivery.</description>
+  <groupId>00000000-0000-0000-0000-000000000001</groupId>
+  <name>LogStorm Pipeline</name>
+  <snippet>
+    <processors>
+      <processor>
+        <id>11111111-1111-1111-1111-111111111111</id>
+        <name>ListenSyslog</name>
+        <type>org.apache.nifi.processors.standard.ListenSyslog</type>
+        <position><x>0.0</x><y>0.0</y></position>
+        <config>
+          <properties>
+            <entry><key>Protocol</key><value>UDP</value></entry>
+            <entry><key>Port</key><value>5140</value></entry>
+            <entry><key>Parse Messages</key><value>false</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>22222222-2222-2222-2222-222222222222</id>
+        <name>ExtractText</name>
+        <type>org.apache.nifi.processors.standard.ExtractText</type>
+        <position><x>240.0</x><y>0.0</y></position>
+        <config>
+          <properties>
+            <entry><key>json_blob</key><value>(\{.*\})$</value></entry>
+            <entry><key>Enable DOTALL Mode</key><value>true</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>33333333-3333-3333-3333-333333333333</id>
+        <name>EvaluateJsonPath</name>
+        <type>org.apache.nifi.processors.standard.EvaluateJsonPath</type>
+        <position><x>480.0</x><y>0.0</y></position>
+        <config>
+          <properties>
+            <entry><key>Destination</key><value>flowfile-attribute</value></entry>
+            <entry><key>json-source</key><value>${json_blob}</value></entry>
+            <entry><key>timestamp</key><value>$.timestamp</value></entry>
+            <entry><key>endpoint</key><value>$.endpoint</value></entry>
+            <entry><key>method</key><value>$.method</value></entry>
+            <entry><key>status_code</key><value>$.status_code</value></entry>
+            <entry><key>response_time_ms</key><value>$.response_time_ms</value></entry>
+            <entry><key>user_id</key><value>$.user_id</value></entry>
+            <entry><key>ip</key><value>$.ip</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>44444444-4444-4444-4444-444444444444</id>
+        <name>InvokeHTTP</name>
+        <type>org.apache.nifi.processors.standard.InvokeHTTP</type>
+        <position><x>720.0</x><y>0.0</y></position>
+        <config>
+          <properties>
+            <entry><key>HTTP Method</key><value>POST</value></entry>
+            <entry><key>Remote URL</key><value>http://geoip:8081/lookup</value></entry>
+            <entry><key>Content-Type</key><value>application/json</value></entry>
+            <entry><key>Request Body Enabled</key><value>true</value></entry>
+            <entry><key>send-message-body</key><value>{"ip":"${ip}"}</value></entry>
+            <entry><key>Response Generation Required</key><value>true</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>55555555-5555-5555-5555-555555555555</id>
+        <name>UpdateAttribute</name>
+        <type>org.apache.nifi.processors.attributes.UpdateAttribute</type>
+        <position><x>960.0</x><y>0.0</y></position>
+        <config>
+          <properties>
+            <entry><key>pipeline.version</key><value>1.0</value></entry>
+            <entry><key>processed.at</key><value>${now():format("yyyy-MM-dd'T'HH:mm:ssXXX")}</value></entry>
+            <entry><key>country</key><value>${invokehttp.response.body:jsonPath('$.country')}</value></entry>
+            <entry><key>is_vpn</key><value>${invokehttp.response.body:jsonPath('$.is_vpn')}</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>66666666-6666-6666-6666-666666666666</id>
+        <name>RouteOnAttribute</name>
+        <type>org.apache.nifi.processors.standard.RouteOnAttribute</type>
+        <position><x>1200.0</x><y>0.0</y></position>
+        <config>
+          <properties>
+            <entry><key>error_lane</key><value>${status_code:matches('4\\d\\d|5\\d\\d')}</value></entry>
+            <entry><key>slow_lane</key><value>${response_time_ms:toNumber():gt(1000)}</value></entry>
+            <entry><key>normal_lane</key><value>${status_code:toNumber():lt(400):and(${response_time_ms:toNumber():le(1000)})}</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>77777777-7777-7777-7777-777777777777</id>
+        <name>DetectDuplicate</name>
+        <type>org.apache.nifi.processors.standard.DetectDuplicate</type>
+        <position><x>1440.0</x><y>180.0</y></position>
+        <config>
+          <properties>
+            <entry><key>Cache Entry Identifier</key><value>${user_id}_${timestamp}_${endpoint}</value></entry>
+            <entry><key>Distributed Cache Service</key><value>LocalMapCacheClientService</value></entry>
+            <entry><key>Age Off Duration</key><value>30 min</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>88888888-8888-8888-8888-888888888888</id>
+        <name>ConvertRecord</name>
+        <type>org.apache.nifi.processors.standard.ConvertRecord</type>
+        <position><x>1680.0</x><y>180.0</y></position>
+        <config>
+          <properties>
+            <entry><key>Record Reader</key><value>JsonTreeReader</value></entry>
+            <entry><key>Record Writer</key><value>ParquetRecordSetWriter</value></entry>
+            <entry><key>Schema Access Strategy</key><value>Use Schema Name</value></entry>
+            <entry><key>Schema Name</key><value>logstorm_event</value></entry>
+            <entry><key>Schema Registry</key><value>AvroSchemaRegistry</value></entry>
+          </properties>
+        </config>
+      </processor>
+      <processor>
+        <id>99999999-9999-9999-9999-999999999999</id>
+        <name>PutS3Object</name>
+        <type>org.apache.nifi.processors.aws.s3.PutS3Object</type>
+        <position><x>1920.0</x><y>180.0</y></position>
+        <config>
+          <properties>
+            <entry><key>Bucket</key><value>logstorm-raw</value></entry>
+            <entry><key>Object Key</key><value>year=${now():format('yyyy')}/month=${now():format('MM')}/day=${now():format('dd')}/hour=${now():format('HH')}/file-${uuid()}.parquet</value></entry>
+            <entry><key>Region</key><value>us-east-1</value></entry>
+            <entry><key>Endpoint Override URL</key><value>http://minio:9000</value></entry>
+            <entry><key>Force Path Style Access</key><value>true</value></entry>
+            <entry><key>Access Key</key><value>minioadmin</value></entry>
+            <entry><key>Secret Key</key><value>minioadmin</value></entry>
+          </properties>
+        </config>
+      </processor>
+    </processors>
+    <connections>
+      <connection><id>a1</id><sourceId>11111111-1111-1111-1111-111111111111</sourceId><destinationId>22222222-2222-2222-2222-222222222222</destinationId><selectedRelationships><relationship>success</relationship></selectedRelationships></connection>
+      <connection><id>a2</id><sourceId>22222222-2222-2222-2222-222222222222</sourceId><destinationId>33333333-3333-3333-3333-333333333333</destinationId><selectedRelationships><relationship>matched</relationship></selectedRelationships></connection>
+      <connection><id>a3</id><sourceId>33333333-3333-3333-3333-333333333333</sourceId><destinationId>44444444-4444-4444-4444-444444444444</destinationId><selectedRelationships><relationship>matched</relationship></selectedRelationships></connection>
+      <connection><id>a4</id><sourceId>44444444-4444-4444-4444-444444444444</sourceId><destinationId>55555555-5555-5555-5555-555555555555</destinationId><selectedRelationships><relationship>response</relationship></selectedRelationships></connection>
+      <connection><id>a5</id><sourceId>55555555-5555-5555-5555-555555555555</sourceId><destinationId>66666666-6666-6666-6666-666666666666</destinationId><selectedRelationships><relationship>success</relationship></selectedRelationships></connection>
+      <connection><id>a6</id><sourceId>66666666-6666-6666-6666-666666666666</sourceId><destinationId>77777777-7777-7777-7777-777777777777</destinationId><selectedRelationships><relationship>error_lane</relationship><relationship>slow_lane</relationship><relationship>normal_lane</relationship></selectedRelationships></connection>
+      <connection><id>a7</id><sourceId>77777777-7777-7777-7777-777777777777</sourceId><destinationId>88888888-8888-8888-8888-888888888888</destinationId><selectedRelationships><relationship>non-duplicate</relationship></selectedRelationships></connection>
+      <connection><id>a8</id><sourceId>88888888-8888-8888-8888-888888888888</sourceId><destinationId>99999999-9999-9999-9999-999999999999</destinationId><selectedRelationships><relationship>success</relationship></selectedRelationships></connection>
+    </connections>
+  </snippet>
+</template>

@@ -1,0 +1,74 @@
+dataContractSpecification: 1.1.0
+id: logstorm-log-event
+info:
+  title: LogStorm Log Event Contract
+  version: 1.0.0
+  description: Canonical request log record for the LogStorm school data platform.
+servers:
+  local:
+    type: s3
+    environment: dev
+terms:
+  usage: Structured application request logs emitted by the FastAPI frontend and validated before storage.
+models:
+  logstorm_log_event:
+    type: object
+    fields:
+      timestamp:
+        type: datetime
+        required: true
+      status_code:
+        type: integer
+        minimum: 100
+        maximum: 599
+      response_time_ms:
+        type: integer
+        minimum: 0
+        maximum: 60000
+      user_id:
+        type: string
+        pattern: ^usr_[a-z0-9]{8}$
+      ip:
+        type: string
+        format: ipv4
+      endpoint:
+        type: string
+        enum:
+          - /
+          - /login
+          - /checkout
+          - /api/data
+          - /admin
+      method:
+        type: string
+      session_id:
+        type: string
+      user_agent:
+        type: string
+quality:
+  type: rule-based
+  rules:
+    - field: timestamp
+      kind: required
+    - field: status_code
+      kind: range
+      min: 100
+      max: 599
+    - field: response_time_ms
+      kind: range
+      min: 0
+      max: 60000
+    - field: user_id
+      kind: pattern
+      pattern: ^usr_[a-z0-9]{8}$
+    - field: ip
+      kind: format
+      format: ipv4
+    - field: endpoint
+      kind: enum
+      allowed:
+        - /
+        - /login
+        - /checkout
+        - /api/data
+        - /admin

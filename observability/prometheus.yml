@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: logstorm-dataops-api
+    static_configs:
+      - targets: ["dataops-api:8090"]
+    metrics_path: /metrics
+
+  - job_name: logstorm-monitor
+    static_configs:
+      - targets: ["monitor:9108"]
+

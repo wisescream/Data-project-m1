@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "info", "models"],
+  "properties": {
+    "id": { "type": "string" },
+    "info": {
+      "type": "object",
+      "required": ["version"],
+      "properties": {
+        "version": { "type": "string" }
+      }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "logstorm_log_event": {
+          "type": "object",
+          "required": ["fields"],
+          "properties": {
+            "fields": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "required": ["logstorm_log_event"]
+    }
+  }
+}

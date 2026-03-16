@@ -1,0 +1,102 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "logstorm.enriched.basic",
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "timestamp"
+      }
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "anomaly_score"
+      }
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "bot_score"
+      }
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "country"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "user_id"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "ip"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "status_code"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "anomaly_score",
+        "min_value": 0.0,
+        "max_value": 1.0
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "bot_score",
+        "min_value": 0.0,
+        "max_value": 1.0
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "status_code",
+        "min_value": 100,
+        "max_value": 599
+      }
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {
+        "column": "user_id",
+        "min_value": 8,
+        "max_value": 20
+      }
+    },
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "min_value": 50,
+        "max_value": 50000
+      }
+    },
+    {
+      "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
+      "kwargs": {
+        "column_A": "anomaly_score",
+        "column_B": "error_anomaly_threshold",
+        "or_equal": true,
+        "ignore_row_if": "never"
+      },
+      "meta": {
+        "description": "Customized in code so rows with status_code >= 400 must have anomaly_score > 0.3."
+      }
+    }
+  ],
+  "meta": {
+    "great_expectations_version": "1.0.0"
+  }
+}

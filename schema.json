@@ -1,0 +1,14 @@
+{
+  "timestamp": "string",
+  "method": "string",
+  "endpoint": "string",
+  "status_code": "int32",
+  "response_time_ms": "double",
+  "user_id": "string",
+  "ip": "string",
+  "session_id": "string",
+  "user_agent": "string",
+  "country": "string",
+  "is_vpn": "string",
+  "is_bot": "int32"
+}
