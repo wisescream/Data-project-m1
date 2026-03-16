@@ -4,7 +4,7 @@ LogStorm is a school data engineering platform that ingests structured app logs 
 
 ## Architecture
 
-![LogStorm pipeline architecture](/C:/Users/Rayane/OneDrive/Bureau/Algo-/logstorm_pipeline_architecture.svg)
+![LogStorm pipeline architecture](/C:/Users/Rayane/OneDrive/Bureau/Algo-/logstorm_pipeline_architecture.png)
 
 ## Structure
 
