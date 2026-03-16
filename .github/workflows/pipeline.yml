@@ -46,7 +46,10 @@ jobs:
     needs: [lint, unit-tests]
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose up -d --build minio minio-init dynamodb-local dynamodb-init web geoip dataops-api postgres marquez nifi nifi-bootstrap rsyslog
+      - run: >
+          docker compose up -d --build minio minio-init dynamodb-local
+          dynamodb-init web geoip dataops-api postgres marquez nifi
+          nifi-bootstrap rsyslog
       - run: |
           python - <<'PY'
           import requests
@@ -61,7 +64,13 @@ jobs:
           from botocore.client import Config
           import pyarrow.parquet as pq
           from pyarrow.fs import S3FileSystem
-          s3 = boto3.client("s3", endpoint_url="http://localhost:9000", aws_access_key_id="minioadmin", aws_secret_access_key="minioadmin", config=Config(signature_version="s3v4"))
+          s3 = boto3.client(
+              "s3",
+              endpoint_url="http://localhost:9000",
+              aws_access_key_id="minioadmin",
+              aws_secret_access_key="minioadmin",
+              config=Config(signature_version="s3v4"),
+          )
           raw = s3.list_objects_v2(Bucket="logstorm-raw").get("Contents", [])
           assert len(raw) >= 90, f"expected at least 90 parquet objects, got {len(raw)}"
           quarantine = s3.list_objects_v2(Bucket="logstorm-quarantine").get("Contents", [])

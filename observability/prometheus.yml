@@ -10,4 +10,3 @@ scrape_configs:
   - job_name: logstorm-monitor
     static_configs:
       - targets: ["monitor:9108"]
-

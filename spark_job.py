@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import boto3
-import mlflow
 from botocore.client import Config
 from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.classification import RandomForestClassificationModel, RandomForestClassifier
@@ -19,8 +18,6 @@ from pyspark.sql.types import BooleanType, DoubleType, IntegerType, StringType, 
 
 from dataops.config import load_env_config, storage_uri
 from dataops.contract import contract_schema_fields, load_contract
-from dataops.ge_runner import upload_validation_result, validate_batch
-from lineage.emit_lineage import emit_event
 
 try:
     from synapse.ml.isolationforest import IsolationForest
@@ -261,6 +258,8 @@ def feature_engineering(df: DataFrame) -> DataFrame:
 
 
 def save_model_metadata(version: int, rows_since_retrain: int, anomaly_mode: str, batch_size: int) -> None:
+    import mlflow
+
     mlflow.set_tracking_uri(MLFLOW_URI)
     with mlflow.start_run(run_name=f"logstorm-model-v{version}"):
         mlflow.log_params(
@@ -416,6 +415,10 @@ def write_alerts(scored: DataFrame) -> None:
 
 
 def foreach_batch(batch_df: DataFrame, batch_id: int) -> None:
+    from dataops.ge_runner import upload_validation_result, validate_batch
+    from lineage.emit_lineage import emit_event
+    import mlflow
+
     if batch_df.rdd.isEmpty():
         return
     run_id = str(uuid.uuid4())
