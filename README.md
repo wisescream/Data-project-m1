@@ -2,6 +2,10 @@
 
 LogStorm is a school data engineering platform that ingests structured app logs through `rsyslog -> NiFi -> Spark -> S3`, then layers DataOps controls on top: contracts, CI/CD, Great Expectations, OpenLineage, environment promotion, and SLO monitoring.
 
+## Architecture
+
+![LogStorm pipeline architecture](/C:/Users/Rayane/OneDrive/Bureau/Algo-/logstorm_pipeline_architecture.svg)
+
 ## Structure
 
 - Runtime apps:
